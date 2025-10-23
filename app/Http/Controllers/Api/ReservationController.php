@@ -29,7 +29,27 @@ class ReservationController extends Controller
             'date_time' => 'required|date',
         ]);
 
-        $reservation = Reservation::create([
+        // ❌ Нельзя бронировать в прошлом
+        if (now()->greaterThan($data['date_time'])) {
+            return response()->json([
+                'message' => 'Нельзя бронировать время в прошлом.'
+            ], 422);
+        }
+
+        // ❌ Проверяем, не занят ли стол
+        $isTaken = \App\Models\Reservation::where('table_id', $data['table_id'])
+            ->where('date_time', $data['date_time'])
+            ->whereIn('status', ['pending', 'confirmed'])
+            ->exists();
+
+        if ($isTaken) {
+            return response()->json([
+                'message' => 'Этот стол уже забронирован на это время.'
+            ], 409);
+        }
+
+        // ✅ Создаём бронь
+        $reservation = \App\Models\Reservation::create([
             'user_id' => $request->user()->id,
             'table_id' => $data['table_id'],
             'date_time' => $data['date_time'],

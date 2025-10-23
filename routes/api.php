@@ -6,12 +6,16 @@ use App\Http\Controllers\Api\RestaurantController;
 use App\Http\Controllers\Api\TableController;
 use App\Http\Controllers\Api\ReservationController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PaymentController;
+
 
 //Route::get('/posts', [PostController::class, 'index']);
 //Route::post('/posts', [PostController::class, 'store']);
 // Рестораны (для всех пользователей)
 Route::get('/restaurants', [RestaurantController::class, 'index']);
 Route::get('/restaurants/{id}', [RestaurantController::class, 'show']);
+Route::get('/restaurants/{id}/tables', [TableController::class, 'index']);
+
 
 // Столики и рестораны (только админ)
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
@@ -42,4 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Бронирования защищены
     Route::post('/reservations', [App\Http\Controllers\Api\ReservationController::class, 'store']);
     Route::get('/reservations', [App\Http\Controllers\Api\ReservationController::class, 'index']);
+});
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/payments', [PaymentController::class, 'store']);
 });

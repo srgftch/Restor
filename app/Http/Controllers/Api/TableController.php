@@ -8,6 +8,13 @@ use Illuminate\Http\Request;
 
 class TableController extends Controller
 {
+
+    public function index($restaurantId)
+    {
+        $tables = Table::where('restaurant_id', $restaurantId)->get();
+        return response()->json($tables);
+    }
+
     public function store(Request $request, $restaurantId)
     {
         $table = Table::create([
