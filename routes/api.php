@@ -18,7 +18,7 @@ Route::get('/restaurants/{id}/tables', [TableController::class, 'index']);
 
 
 // Столики и рестораны (только админ)
-Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+
     Route::post('/restaurants', [RestaurantController::class, 'store']);
     Route::put('/restaurants/{id}', [RestaurantController::class, 'update']);
     Route::delete('/restaurants/{id}', [RestaurantController::class, 'destroy']);
@@ -26,7 +26,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/restaurants/{id}/tables', [TableController::class, 'store']);
     Route::put('/tables/{id}', [TableController::class, 'update']);
     Route::delete('/tables/{id}', [TableController::class, 'destroy']);
-});
 
 // Бронирования (только авторизованные пользователи)
 Route::middleware('auth:sanctum')->group(function () {

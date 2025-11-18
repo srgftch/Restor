@@ -27,7 +27,15 @@ class RestaurantController extends Controller
     public function update(Request $request, $id)
     {
         $restaurant = Restaurant::findOrFail($id);
-        $restaurant->update($request->only('name', 'address', 'description'));
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'address' => 'sometimes|string|max:255',
+            'description' => 'nullable|string',
+            'layout_data' => 'nullable|array'
+        ]);
+
+        $restaurant->update($validated);
+
         return response()->json($restaurant);
     }
 
@@ -38,4 +46,3 @@ class RestaurantController extends Controller
         return response()->noContent();
     }
 }
-
