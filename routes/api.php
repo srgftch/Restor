@@ -1,5 +1,4 @@
 <?php
-
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\RestaurantController;
@@ -7,53 +6,97 @@ use App\Http\Controllers\Api\TableController;
 use App\Http\Controllers\Api\ReservationController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\ManagerController;
 
-
-//Route::get('/posts', [PostController::class, 'index']);
-//Route::post('/posts', [PostController::class, 'store']);
-// Рестораны (для всех пользователей)
-Route::get('/restaurants', [RestaurantController::class, 'index']);
-Route::get('/restaurants/{id}', [RestaurantController::class, 'show']);
-Route::get('/restaurants/{id}/tables', [TableController::class, 'index']);
-
-
-// Столики и рестораны (только админ)
-Route::middleware(['auth:sanctum', 'admin'])->group(function () {
-    Route::post('/restaurants', [RestaurantController::class, 'store']);
-    Route::put('/restaurants/{id}', [RestaurantController::class, 'update']);
-    Route::delete('/restaurants/{id}', [RestaurantController::class, 'destroy']);
-
-    Route::post('/restaurants/{id}/tables', [TableController::class, 'store']);
-    Route::put('/tables/{id}', [TableController::class, 'update']);
-    Route::delete('/tables/{id}', [TableController::class, 'destroy']);
-});
-
-// Бронирования (только авторизованные пользователи)
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/reservations', [ReservationController::class, 'index']);
-    Route::post('/reservations', [ReservationController::class, 'store']);
-    Route::delete('/reservations/{id}', [ReservationController::class, 'destroy']);
-});
+// ==================== PUBLIC ROUTES ====================
 
 // Авторизация
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
-// Защищенные бронирования через Sanctum
+
+// Рестораны и столы
+Route::get('/restaurants', [RestaurantController::class, 'index']);
+Route::get('/restaurants/{id}', [RestaurantController::class, 'show']);
+Route::get('/restaurants/{restaurantId}/tables', [TableController::class, 'index']);
+
+// ==================== AUTHENTICATED ROUTES  ====================
+
+// ALL USERS
 Route::middleware('auth:sanctum')->group(function () {
+    // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
-});
-Route::middleware('auth:sanctum')->group(function () {
+
+    // Payments
     Route::post('/payments', [PaymentController::class, 'store']);
     Route::post('/payments/verify-sms', [PaymentController::class, 'verifySms']);
     Route::get('/payments/result/{token}', [PaymentController::class, 'getResult']);
+
+    // Reservations
+    Route::get('/reservations', [ReservationController::class, 'index']);
+    Route::post('/reservations', [ReservationController::class, 'store']);
+    Route::get('/reservations/{id}', [ReservationController::class, 'show']);
+    Route::delete('/reservations/{id}', [ReservationController::class, 'destroy']);
+
+    // Restaurants and tables view
+    Route::get('/restaurants/{restaurantId}/tables', [TableController::class, 'index']);
 });
 
+// ==================== MANAGER ROUTES ====================
 
+Route::middleware(['auth:sanctum'])->prefix('manager')->group(function () {
+    // User management
+    Route::get('/users', [ManagerController::class, 'getUsers']);
+    Route::post('/users/{id}/block', [ManagerController::class, 'blockUser']);
+    Route::post('/users/{id}/unblock', [ManagerController::class, 'unblockUser']);
 
+    // Restaurant management
+    Route::put('/restaurants/{id}', [RestaurantController::class, 'update']);
 
+    // Table management
+    Route::post('/restaurants/{restaurantId}/tables', [TableController::class, 'store']);
+    Route::put('/tables/{id}', [TableController::class, 'update']);
+    Route::delete('/tables/{id}', [TableController::class, 'destroy']);
+    Route::post('/reservations/check-availability', [ReservationController::class, 'checkAvailability']);
 
-// Публичные тестовые маршруты
+    // Reservation management
+    Route::put('/reservations/{id}', [ReservationController::class, 'update']);
+});
+
+// ==================== ADMIN ROUTES ====================
+
+Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
+    // User management
+    Route::get('/users', [AdminController::class, 'getUsers']);
+    Route::post('/users/{id}/block', [AdminController::class, 'blockUser']);
+    Route::post('/users/{id}/unblock', [AdminController::class, 'unblockUser']);
+    Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
+
+    // Manager management
+    Route::get('/managers', [AdminController::class, 'getManagers']);
+    Route::post('/managers', [AdminController::class, 'createManager']);
+    Route::post('/managers/{id}/block', [AdminController::class, 'blockManager']);
+    Route::post('/managers/{id}/unblock', [AdminController::class, 'unblockManager']);
+    Route::delete('/managers/{id}', [AdminController::class, 'deleteManager']);
+
+    // Restaurant management
+    Route::post('/restaurants', [RestaurantController::class, 'store']);
+    Route::put('/restaurants/{id}', [RestaurantController::class, 'update']);
+    Route::delete('/restaurants/{id}', [RestaurantController::class, 'destroy']);
+
+    // Table management
+    Route::post('/restaurants/{restaurantId}/tables', [TableController::class, 'store']);
+    Route::put('/tables/{id}', [TableController::class, 'update']);
+    Route::delete('/tables/{id}', [TableController::class, 'destroy']);
+    Route::post('/reservations/check-availability', [ReservationController::class, 'checkAvailability']);
+
+    // Reservation management
+    Route::put('/reservations/{id}', [ReservationController::class, 'update']);
+});
+
+// ==================== TEST ROUTES ====================
+
 Route::prefix('test')->group(function () {
     Route::post('/create-test-data', function (Request $request) {
         try {
@@ -131,18 +174,4 @@ Route::prefix('test')->group(function () {
             ]
         ]);
     });
-});
-
-// Защищенные маршруты
-Route::middleware('auth:sanctum')->group(function () {
-    // Payment routes
-    Route::post('/payments', [PaymentController::class, 'store']);
-    Route::post('/payments/verify-sms', [PaymentController::class, 'verifySms']);
-    Route::get('/payments/result/{token}', [PaymentController::class, 'getResult']);
-
-    // Reservation routes
-    Route::get('/reservations', [ReservationController::class, 'index']);
-    Route::post('/reservations', [ReservationController::class, 'store']);
-    Route::get('/reservations/{id}', [ReservationController::class, 'show']);
-    Route::delete('/reservations/{id}', [ReservationController::class, 'destroy']);
 });
