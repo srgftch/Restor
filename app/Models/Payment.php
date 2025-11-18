@@ -16,12 +16,24 @@ class Payment extends Model
         'card_brand',
         'card_last4',
         'meta',
+        'verified_at',
+        'processed_at',
     ];
 
     protected $casts = [
         'meta' => 'array',
+        'amount_rubles' => 'integer',
+        'verified_at' => 'datetime',
+        'processed_at' => 'datetime',
     ];
 
-    public function user() { return $this->belongsTo(\App\Models\User::class); }
-    public function reservation() { return $this->belongsTo(\App\Models\Reservation::class); }
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function reservation()
+    {
+        return $this->belongsTo(Reservation::class);
+    }
 }

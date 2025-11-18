@@ -8,27 +8,27 @@ use App\Models\Reservation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 
 class PaymentController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth:sanctum'); // платёжные операции только для залогиненных
+        $this->middleware('auth:sanctum');
     }
 
-    // POST /api/payments
+    // POST /api/payments - начальный этап оплаты
     public function store(Request $request)
     {
-        // валидируем вход
         $v = Validator::make($request->all(), [
             'reservation_id' => 'required|exists:reservations,id',
             'amount' => 'required|numeric|min:0.01',
             'currency' => 'nullable|string|size:3',
             'card_number' => 'required|string',
             'card_exp_month' => 'required|integer|min:1|max:12',
-            'card_exp_year' => 'required|integer|min:2000',
+            'card_exp_year' => 'required|integer|min:' . date('Y'),
             'card_cvc' => 'required|string',
-            'save_card' => 'boolean', // опционально
+            'save_card' => 'boolean',
         ]);
 
         if ($v->fails()) {
@@ -56,22 +56,13 @@ class PaymentController extends Controller
         $cardBrand = $this->detectCardBrand($data['card_number']);
         $last4 = substr(preg_replace('/\D/', '', $data['card_number']), -4);
 
-        // НЕ логируем полный номер и CVV! Удаляем их из $data
-        // (они уже пришли — но мы не сохраняем и не логируем)
-        unset($data['card_number'], $data['card_cvc']);
-
-        // Получаем reservation и сумму в центах
-        $reservation = Reservation::findOrFail($v->validated()['reservation_id']);
-        $amountCents = (int) round($data['amount'] * 100);
-        $currency = $data['currency'] ?? 'USD';
-
-        // Создадим запись payment в статусе pending
+        // Создаем запись payment в статусе pending
         $payment = Payment::create([
             'user_id' => $request->user()->id,
-            'reservation_id' => $reservation->id,
-            'amount_rubles' => $amountCents,
-            'currency' => strtoupper($currency),
-            'status' => 'pending',
+            'reservation_id' => $data['reservation_id'],
+            'amount_rubles' => (int) round($data['amount'] * 100),
+            'currency' => strtoupper($data['currency'] ?? 'RUB'),
+            'status' => 'pending_verification', // используем строку напрямую
             'card_brand' => $cardBrand,
             'card_last4' => $last4,
             'meta' => [
@@ -79,35 +70,136 @@ class PaymentController extends Controller
             ],
         ]);
 
+        // Генерируем и сохраняем код подтверждения
+        $smsCode = $this->generateSmsCode();
+        $verificationToken = Str::random(32);
+
+        Cache::put("payment_verification:{$verificationToken}", [
+            'payment_id' => $payment->id,
+            'sms_code' => $smsCode,
+            'attempts' => 0,
+        ], now()->addMinutes(10));
+
+        // Возвращаем токен для перехода на страницу подтверждения
+        return response()->json([
+            'verification_token' => $verificationToken,
+            'payment_id' => $payment->id,
+            'sms_code' => $smsCode, // ДОБАВЛЯЕМ код в ответ для тестирования
+            'message' => 'SMS code sent for verification',
+        ]);
+    }
+
+    // POST /api/payments/verify-sms - подтверждение SMS кода
+    // POST /api/payments/verify-sms - подтверждение SMS кода
+    public function verifySms(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'verification_token' => 'required|string',
+            'sms_code' => 'required|string|size:3', // меняем на 3 цифры
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
+
+        $data = $v->validated();
+        $cacheKey = "payment_verification:{$data['verification_token']}";
+        $verificationData = Cache::get($cacheKey);
+
+        if (!$verificationData) {
+            return response()->json(['message' => 'Invalid or expired verification token'], 422);
+        }
+
+        // Проверяем количество попыток
+        if ($verificationData['attempts'] >= 3) {
+            Cache::forget($cacheKey);
+            return response()->json(['message' => 'Too many attempts. Please start over.'], 422);
+        }
+
+        // Проверяем код
+        if ($verificationData['sms_code'] !== $data['sms_code']) {
+            $verificationData['attempts']++;
+            Cache::put($cacheKey, $verificationData, now()->addMinutes(10));
+
+            $remainingAttempts = 3 - $verificationData['attempts'];
+            return response()->json([
+                'message' => 'Invalid SMS code',
+                'remaining_attempts' => $remainingAttempts
+            ], 422);
+        }
+
+        // Код верный - выполняем оплату
+        $payment = Payment::findOrFail($verificationData['payment_id']);
+
+        // Отмечаем время подтверждения
+        $payment->update(['verified_at' => now()]);
+
         // Симуляция отправки в банк
         $result = $this->simulateBankRequest([
-            'amount_rubles' => $amountCents,
-            'currency' => $currency,
-            'last4' => $last4,
-            'brand' => $cardBrand,
+            'amount_rubles' => $payment->amount_rubles,
+            'currency' => $payment->currency,
+            'last4' => $payment->card_last4,
+            'brand' => $payment->card_brand,
         ]);
 
-        // Обновляем payment в зависимости от результата
+        // Обновляем платеж
         $payment->update([
-            'status' => $result['status'], // approved | declined | error
+            'status' => $result['status'],
             'provider_reference' => $result['reference'] ?? null,
-            'meta' => array_merge($payment->meta ?? [], ['bank_response' => $result]),
+            'processed_at' => now(),
+            'meta' => array_merge($payment->meta ?? [], [
+                'bank_response' => $result,
+            ]),
         ]);
 
-        // Возвращаем ответ фронту (не возвращаем номер/ CVV)
-        return response()->json([
-            'id' => $payment->id,
+        // Очищаем кэш
+        Cache::forget($cacheKey);
+
+        // Генерируем токен для редиректа на финальную страницу
+        $resultToken = Str::random(32);
+        Cache::put("payment_result:{$resultToken}", [
+            'payment_id' => $payment->id,
             'status' => $payment->status,
-            'provider_reference' => $payment->provider_reference,
-            'amount_cents' => $payment->amount_cents,
+        ], now()->addMinutes(10));
+
+        // ВОЗВРАЩАЕМ статус платежа из обновленной записи
+        return response()->json([
+            'success' => true,
+            'result_token' => $resultToken,
+            'status' => $payment->status, // берем статус из обновленного платежа
+            'payment_id' => $payment->id,
+        ]);
+    }
+
+    // GET /api/payments/result/{token} - получение результата оплаты
+    public function getResult($token)
+    {
+        $cacheKey = "payment_result:{$token}";
+        $resultData = Cache::get($cacheKey);
+
+        if (!$resultData) {
+            return response()->json(['message' => 'Invalid or expired result token'], 404);
+        }
+
+        $payment = Payment::find($resultData['payment_id']);
+
+        if (!$payment) {
+            return response()->json(['message' => 'Payment not found'], 404);
+        }
+
+        return response()->json([
+            'payment_id' => $payment->id,
+            'status' => $payment->status,
+            'amount_rubles' => $payment->amount_rubles,
             'currency' => $payment->currency,
             'card_brand' => $payment->card_brand,
             'card_last4' => $payment->card_last4,
+            'provider_reference' => $payment->provider_reference,
             'created_at' => $payment->created_at,
-        ], $payment->status === 'approved' ? 200 : 402);
+        ]);
     }
 
-    // ---- вспомогательные методы ----
+// ---- вспомогательные методы ----
 
     protected function luhnCheck(string $number): bool
     {
@@ -129,6 +221,7 @@ class PaymentController extends Controller
     protected function detectCardBrand(string $number): string
     {
         $n = preg_replace('/\D/', '', $number);
+        if (preg_match('/^220[0-4][0-9]{12}$/', $n)) return 'mir';
         if (preg_match('/^4[0-9]{12}(?:[0-9]{3})?$/', $n)) return 'visa';
         if (preg_match('/^5[1-5][0-9]{14}$/', $n)) return 'mastercard';
         if (preg_match('/^3[47][0-9]{13}$/', $n)) return 'amex';
@@ -136,10 +229,14 @@ class PaymentController extends Controller
         return 'unknown';
     }
 
-    // very simple bank simulator: approve if last digit != 0, otherwise decline
+// ИСПРАВЛЕННЫЙ метод генерации SMS кода (от 100 до 999)
+    protected function generateSmsCode(): string
+    {
+        return sprintf('%03d', rand(100, 999));
+    }
+
     protected function simulateBankRequest(array $payload): array
     {
-        // deterministic rule for tests: если last4 заканчивается на 0 => decline
         $last = (int) substr($payload['last4'], -1);
         if ($last === 0) {
             return [
