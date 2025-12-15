@@ -62,7 +62,7 @@ class PaymentController extends Controller
             'reservation_id' => $data['reservation_id'],
             'amount_rubles' => (int) round($data['amount'] * 100),
             'currency' => strtoupper($data['currency'] ?? 'RUB'),
-            'status' => 'pending_verification', // используем строку напрямую
+            'status' => 'pending_verification',
             'card_brand' => $cardBrand,
             'card_last4' => $last4,
             'meta' => [
@@ -84,18 +84,17 @@ class PaymentController extends Controller
         return response()->json([
             'verification_token' => $verificationToken,
             'payment_id' => $payment->id,
-            'sms_code' => $smsCode, // ДОБАВЛЯЕМ код в ответ для тестирования
+            'sms_code' => $smsCode,
             'message' => 'SMS code sent for verification',
         ]);
     }
 
     // POST /api/payments/verify-sms - подтверждение SMS кода
-    // POST /api/payments/verify-sms - подтверждение SMS кода
     public function verifySms(Request $request)
     {
         $v = Validator::make($request->all(), [
             'verification_token' => 'required|string',
-            'sms_code' => 'required|string|size:3', // меняем на 3 цифры
+            'sms_code' => 'required|string|size:3',
         ]);
 
         if ($v->fails()) {
@@ -162,11 +161,11 @@ class PaymentController extends Controller
             'status' => $payment->status,
         ], now()->addMinutes(10));
 
-        // ВОЗВРАЩАЕМ статус платежа из обновленной записи
+        // Возвращаем статус платежа из обновленной записи
         return response()->json([
             'success' => true,
             'result_token' => $resultToken,
-            'status' => $payment->status, // берем статус из обновленного платежа
+            'status' => $payment->status,
             'payment_id' => $payment->id,
         ]);
     }
@@ -199,8 +198,6 @@ class PaymentController extends Controller
         ]);
     }
 
-// ---- вспомогательные методы ----
-
     protected function luhnCheck(string $number): bool
     {
         $number = preg_replace('/\D/', '', $number);
@@ -224,12 +221,9 @@ class PaymentController extends Controller
         if (preg_match('/^220[0-4][0-9]{12}$/', $n)) return 'mir';
         if (preg_match('/^4[0-9]{12}(?:[0-9]{3})?$/', $n)) return 'visa';
         if (preg_match('/^5[1-5][0-9]{14}$/', $n)) return 'mastercard';
-        if (preg_match('/^3[47][0-9]{13}$/', $n)) return 'amex';
-        if (preg_match('/^6(?:011|5[0-9]{2})[0-9]{12}$/', $n)) return 'discover';
         return 'unknown';
     }
 
-// ИСПРАВЛЕННЫЙ метод генерации SMS кода (от 100 до 999)
     protected function generateSmsCode(): string
     {
         return sprintf('%03d', rand(100, 999));

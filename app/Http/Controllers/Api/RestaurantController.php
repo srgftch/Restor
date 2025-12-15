@@ -46,3 +46,4 @@ class RestaurantController extends Controller
         return response()->noContent();
     }
 }
+
