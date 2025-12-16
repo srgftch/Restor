@@ -11,7 +11,7 @@ class TestDataSeeder extends Seeder
 {
     public function run()
     {
-        // Создаем тестовый ресторан
+        // тест ресторан
         $restaurant = Restaurant::firstOrCreate(
             ['name' => 'Test Restaurant'],
             [
@@ -20,7 +20,7 @@ class TestDataSeeder extends Seeder
             ]
         );
 
-        // Создаем тестовые столы (используем seats вместо capacity)
+        // тест столы
         Table::firstOrCreate(
             ['number' => 1, 'restaurant_id' => $restaurant->id],
             ['seats' => 4]
@@ -31,7 +31,7 @@ class TestDataSeeder extends Seeder
             ['seats' => 2]
         );
 
-        // Создаем тестового пользователя
+        // тест юзер
         User::firstOrCreate(
             ['email' => 'test@example.com'],
             [
@@ -40,7 +40,7 @@ class TestDataSeeder extends Seeder
             ]
         );
 
-        $this->command->info('✅ Test data created successfully!');
+        $this->command->info('Test data created successfully');
         $this->command->info("Restaurant: {$restaurant->name}");
         $this->command->info("Tables created: 2");
         $this->command->info("User: test@example.com / password");

@@ -52,17 +52,17 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Card expired'], 422);
         }
 
-        // Бренд карты и last4
+        // Бренд карты и последние 4 цифры
         $cardBrand = $this->detectCardBrand($data['card_number']);
         $last4 = substr(preg_replace('/\D/', '', $data['card_number']), -4);
 
-        // Создаем запись payment в статусе pending
+        // Создаем запись payment
         $payment = Payment::create([
             'user_id' => $request->user()->id,
             'reservation_id' => $data['reservation_id'],
             'amount_rubles' => (int) round($data['amount'] * 100),
             'currency' => strtoupper($data['currency'] ?? 'RUB'),
-            'status' => 'pending_verification',
+            'status' => 'pending_verification', // используем строку напрямую
             'card_brand' => $cardBrand,
             'card_last4' => $last4,
             'meta' => [
@@ -84,7 +84,7 @@ class PaymentController extends Controller
         return response()->json([
             'verification_token' => $verificationToken,
             'payment_id' => $payment->id,
-            'sms_code' => $smsCode,
+            'sms_code' => $smsCode, // для тестов
             'message' => 'SMS code sent for verification',
         ]);
     }
@@ -94,7 +94,7 @@ class PaymentController extends Controller
     {
         $v = Validator::make($request->all(), [
             'verification_token' => 'required|string',
-            'sms_code' => 'required|string|size:3',
+            'sms_code' => 'required|string|size:3', // меняем на 3 цифры
         ]);
 
         if ($v->fails()) {
@@ -221,6 +221,8 @@ class PaymentController extends Controller
         if (preg_match('/^220[0-4][0-9]{12}$/', $n)) return 'mir';
         if (preg_match('/^4[0-9]{12}(?:[0-9]{3})?$/', $n)) return 'visa';
         if (preg_match('/^5[1-5][0-9]{14}$/', $n)) return 'mastercard';
+        if (preg_match('/^3[47][0-9]{13}$/', $n)) return 'amex';
+        if (preg_match('/^6(?:011|5[0-9]{2})[0-9]{12}$/', $n)) return 'discover';
         return 'unknown';
     }
 

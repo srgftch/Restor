@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\ManagerController;
+use App\Http\Controllers\Api\FoodController;
 
 // ==================== PUBLIC ROUTES ====================
 
@@ -19,6 +20,8 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/restaurants', [RestaurantController::class, 'index']);
 Route::get('/restaurants/{id}', [RestaurantController::class, 'show']);
 Route::get('/restaurants/{restaurantId}/tables', [TableController::class, 'index']);
+Route::get('/foods', [FoodController::class, 'index']);
+Route::get('/foods/{id}', [FoodController::class, 'show']);
 
 // ==================== AUTHENTICATED ROUTES  ====================
 
@@ -59,6 +62,10 @@ Route::middleware(['auth:sanctum'])->prefix('manager')->group(function () {
     Route::put('/tables/{id}', [TableController::class, 'update']);
     Route::delete('/tables/{id}', [TableController::class, 'destroy']);
     Route::post('/reservations/check-availability', [ReservationController::class, 'checkAvailability']);
+    // Food management
+    Route::post('/foods', [FoodController::class, 'store']);
+    Route::put('/foods/{id}', [FoodController::class, 'update']);
+    Route::delete('/foods/{id}', [FoodController::class, 'destroy']);
 
     // Reservation management
     Route::put('/reservations/{id}', [ReservationController::class, 'update']);
@@ -90,6 +97,10 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
     Route::put('/tables/{id}', [TableController::class, 'update']);
     Route::delete('/tables/{id}', [TableController::class, 'destroy']);
     Route::post('/reservations/check-availability', [ReservationController::class, 'checkAvailability']);
+    // Food management
+    Route::post('/foods', [FoodController::class, 'store']);
+    Route::put('/foods/{id}', [FoodController::class, 'update']);
+    Route::delete('/foods/{id}', [FoodController::class, 'destroy']);
 
     // Reservation management
     Route::put('/reservations/{id}', [ReservationController::class, 'update']);
@@ -120,7 +131,7 @@ Route::prefix('test')->group(function () {
                 ]
             );
 
-            // Создаем или получаем стол (используем seats)
+            // Создаем или получаем стол
             $table = \App\Models\Table::firstOrCreate(
                 ['number' => 1, 'restaurant_id' => $restaurant->id],
                 ['seats' => 4]
@@ -161,7 +172,7 @@ Route::prefix('test')->group(function () {
         }
     });
 
-    // Простой тестовый маршрут для проверки API
+    // Проверка API
     Route::get('/status', function () {
         return response()->json([
             'status' => 'API is working',

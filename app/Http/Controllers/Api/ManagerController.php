@@ -8,11 +8,13 @@ use Illuminate\Http\Request;
 
 class ManagerController extends Controller
 {
+    // Применяем middleware auth:sanctum
     public function __construct()
     {
         $this->middleware('auth:sanctum');
     }
 
+    // === USER MANAGEMENT ===
 
     // GET /api/manager/users - список пользователей
     public function getUsers(Request $request)

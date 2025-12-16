@@ -14,6 +14,7 @@ class AdminController extends Controller
         $this->middleware('auth:sanctum');
     }
 
+
     // GET /api/admin/users - список всех пользователей
     public function getUsers(Request $request)
     {
