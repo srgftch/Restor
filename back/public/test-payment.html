@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Restaurant Payment Test</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 20px auto; padding: 20px; }
+        .step { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        button { padding: 12px 20px; margin: 10px 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .info { color: #6c757d; }
+        .hidden { display: none; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        input, select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .sms-code { font-size: 24px; font-weight: bold; color: #007bff; text-align: center; margin: 10px 0; }
+        .card-input { width: 250px; }
+        .small-input { width: 80px; }
+        .form-group { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+<h1>🍽️ Restaurant Booking Payment Test</h1>
+
+<!-- Шаг 0: Проверка API -->
+<div class="step">
+    <h3>0. Проверка API</h3>
+    <button onclick="checkApiStatus()">Проверить статус API</button>
+    <div id="status-result"></div>
+</div>
+
+<!-- Шаг 1: Создание тестовых данных -->
+<div class="step" id="step1">
+    <h3>1. Создание тестовых данных</h3>
+    <button onclick="createTestData()">Создать тестовые данные</button>
+    <div id="step1-result"></div>
+</div>
+
+<!-- Шаг 2: Оплата бронирования -->
+<div class="step hidden" id="step2">
+    <h3>2. Оплата бронирования</h3>
+    <div class="info" id="booking-info"></div>
+
+    <div class="form-group">
+        <label><strong>Данные карты:</strong></label>
+
+        <div style="margin: 10px 0;">
+            <label>Быстрый выбор тестовой карты:</label>
+            <select id="cardSelect" onchange="fillCardFromSelect()" style="width: 300px;">
+                <option value="">-- Выберите тестовую карту --</option>
+                <option value="4111111111111111">Visa 4111 1111 1111 1111 (успешная оплата)</option>
+                <option value="2200387142388060">МИР 2200 3871 4238 8060 (успешная оплата)</option>
+                <option value="4111111111111110">Visa 4111 1111 1111 1110 (отклонена)</option>
+            </select>
+        </div>
+
+        <div style="margin: 15px 0;">
+            <label>Или введите номер карты вручную:</label>
+            <input type="text" id="cardNumber" placeholder="0000 0000 0000 0000" maxlength="19" class="card-input" oninput="formatCardNumber(this)">
+        </div>
+
+        <div style="display: flex; gap: 15px; margin: 10px 0;">
+            <div>
+                <label>Срок действия (месяц):</label>
+                <input type="number" id="cardExpMonth" placeholder="MM" min="1" max="12" value="12" class="small-input">
+            </div>
+            <div>
+                <label>Срок действия (год):</label>
+                <input type="number" id="cardExpYear" placeholder="YYYY" min="2024" max="2030" value="2025" class="small-input">
+            </div>
+            <div>
+                <label>CVC:</label>
+                <input type="text" id="cardCvc" placeholder="123" maxlength="3" value="123" class="small-input">
+            </div>
+        </div>
+    </div>
+
+    <button onclick="startPayment()">💳 Начать оплату</button>
+    <div id="step2-result"></div>
+</div>
+
+<!-- Шаг 3: Подтверждение SMS -->
+<div class="step hidden" id="step3">
+    <h3>3. Подтверждение SMS</h3>
+
+    <!-- Блок с полученным SMS кодом -->
+    <div id="sms-code-display" class="hidden">
+        <p class="info">Сгенерированный SMS код:</p>
+        <div class="sms-code" id="generated-sms-code"></div>
+        <p class="info">Введите этот код ниже для подтверждения</p>
+    </div>
+
+    <div style="margin: 15px 0;">
+        <label><strong>Введите SMS код:</strong></label><br>
+        <input type="text" id="smsCode" placeholder="Введите 3-значный код" maxlength="3" style="width: 150px;">
+        <button onclick="verifySms()">✅ Подтвердить SMS</button>
+    </div>
+
+    <div id="step3-result"></div>
+</div>
+
+<!-- Шаг 4: Результат -->
+<div class="step hidden" id="step4">
+    <h3>4. Результат оплаты</h3>
+    <div id="step4-result"></div>
+    <button onclick="location.reload()">🔄 Новый тест</button>
+</div>
+
+<script>
+    let testData = {};
+    let verificationToken = '';
+    let resultToken = '';
+    let generatedSmsCode = '';
+
+    // Проверка статуса API
+    async function checkApiStatus() {
+        try {
+            const response = await fetch('/api/test/status');
+            const data = await response.json();
+
+            document.getElementById('status-result').innerHTML = `
+                    <div class="success">
+                        <p>✅ API работает корректно</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+        } catch (error) {
+            document.getElementById('status-result').innerHTML = `
+                    <div class="error">
+                        <p>❌ Ошибка подключения к API</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+        }
+    }
+
+    // Создание тестовых данных
+    async function createTestData() {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = 'Создание...';
+
+        try {
+            const response = await fetch('/api/test/create-test-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                testData = data;
+                document.getElementById('step1-result').innerHTML = `
+                        <div class="success">
+                            <p>✅ Тестовые данные созданы успешно!</p>
+                            <p><strong>Ресторан:</strong> ${data.restaurant_name}</p>
+                            <p><strong>Стол:</strong> #${data.table_number} (${data.table_seats} мест)</p>
+                            <p><strong>Бронирование ID:</strong> ${data.reservation_id}</p>
+                            <p><strong>Токен:</strong> ${data.access_token ? '✓ Получен' : '✗ Отсутствует'}</p>
+                        </div>
+                    `;
+
+                document.getElementById('booking-info').innerHTML = `
+                        <p><strong>Бронирование:</strong> Стол #${data.table_number} в "${data.restaurant_name}"</p>
+                        <p><strong>Время:</strong> Завтра 19:00</p>
+                        <p><strong>Количество мест:</strong> ${data.table_seats}</p>
+                        <p><strong>Тестовая сумма:</strong> 1500 ₽</p>
+                    `;
+
+                document.getElementById('step2').classList.remove('hidden');
+            } else {
+                document.getElementById('step1-result').innerHTML = `
+                        <div class="error">
+                            <p>❌ Ошибка создания тестовых данных</p>
+                            <p>${data.message || 'Неизвестная ошибка'}</p>
+                            ${data.trace ? `<pre>${data.trace}</pre>` : ''}
+                        </div>
+                    `;
+            }
+        } catch (error) {
+            document.getElementById('step1-result').innerHTML = `
+                    <div class="error">
+                        <p>❌ Сетевая ошибка</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Создать тестовые данные';
+        }
+    }
+
+    // Форматирование номера карты (добавление пробелов)
+    function formatCardNumber(input) {
+        // Удаляем все нецифровые символы
+        let value = input.value.replace(/\D/g, '');
+
+        // Добавляем пробелы каждые 4 цифры
+        let formattedValue = '';
+        for (let i = 0; i < value.length; i++) {
+            if (i > 0 && i % 4 === 0) {
+                formattedValue += ' ';
+            }
+            formattedValue += value[i];
+        }
+
+        input.value = formattedValue;
+    }
+
+    // Заполнение полей карты из выпадающего списка
+    function fillCardFromSelect() {
+        const select = document.getElementById('cardSelect');
+        const cardNumber = document.getElementById('cardNumber');
+
+        if (select.value) {
+            cardNumber.value = select.value.replace(/(.{4})/g, '$1 ').trim();
+        }
+    }
+
+    // Валидация номера карты
+    function validateCardNumber(cardNumber) {
+        // Удаляем пробелы
+        const cleanNumber = cardNumber.replace(/\s/g, '');
+
+        // Проверяем длину (13-19 цифр)
+        if (cleanNumber.length < 13 || cleanNumber.length > 19) {
+            return false;
+        }
+
+        // Проверяем, что только цифры
+        if (!/^\d+$/.test(cleanNumber)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    // Начало оплаты
+    async function startPayment() {
+        const cardNumber = document.getElementById('cardNumber').value;
+        const cardExpMonth = document.getElementById('cardExpMonth').value;
+        const cardExpYear = document.getElementById('cardExpYear').value;
+        const cardCvc = document.getElementById('cardCvc').value;
+
+        // Валидация номера карты
+        if (!validateCardNumber(cardNumber)) {
+            document.getElementById('step2-result').innerHTML = `
+                    <div class="error">
+                        <p>❌ Неверный номер карты</p>
+                        <p>Введите корректный номер карты (13-19 цифр)</p>
+                    </div>
+                `;
+            return;
+        }
+
+        // Валидация срока действия
+        if (!cardExpMonth || !cardExpYear || !cardCvc) {
+            document.getElementById('step2-result').innerHTML = `
+                    <div class="error">
+                        <p>❌ Заполните все поля карты</p>
+                    </div>
+                `;
+            return;
+        }
+
+        // Очищаем номер карты от пробелов для отправки
+        const cleanCardNumber = cardNumber.replace(/\s/g, '');
+
+        const paymentData = {
+            reservation_id: testData.reservation_id,
+            amount: 1500.00,
+            currency: 'RUB',
+            card_number: cleanCardNumber,
+            card_exp_month: parseInt(cardExpMonth),
+            card_exp_year: parseInt(cardExpYear),
+            card_cvc: cardCvc,
+            save_card: false
+        };
+
+        try {
+            const response = await fetch('/api/payments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Authorization': 'Bearer ' + testData.access_token
+                },
+                body: JSON.stringify(paymentData)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                verificationToken = result.verification_token;
+                generatedSmsCode = result.sms_code;
+
+                // Показываем SMS код пользователю
+                document.getElementById('generated-sms-code').textContent = generatedSmsCode;
+                document.getElementById('sms-code-display').classList.remove('hidden');
+
+                document.getElementById('step2-result').innerHTML = `
+                        <div class="success">
+                            <p>✅ Платеж инициирован успешно!</p>
+                            <p>Payment ID: ${result.payment_id}</p>
+                            <p>SMS код: ${result.sms_code}</p>
+                        </div>
+                    `;
+                document.getElementById('step3').classList.remove('hidden');
+            } else {
+                document.getElementById('step2-result').innerHTML = `
+                        <div class="error">
+                            <p>❌ Ошибка оплаты</p>
+                            <p>${result.message || JSON.stringify(result.errors)}</p>
+                        </div>
+                    `;
+            }
+        } catch (error) {
+            document.getElementById('step2-result').innerHTML = `
+                    <div class="error">
+                        <p>❌ Сетевая ошибка</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+        }
+    }
+
+    // Подтверждение SMS
+    async function verifySms() {
+        const smsCodeInput = document.getElementById('smsCode');
+        const smsCode = smsCodeInput.value.trim();
+
+        // Валидация ввода
+        if (smsCode.length !== 3 || !/^\d{3}$/.test(smsCode)) {
+            document.getElementById('step3-result').innerHTML = `
+                    <div class="error">
+                        <p>❌ Неверный формат кода</p>
+                        <p>Введите 3 цифры (от 100 до 999)</p>
+                    </div>
+                `;
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/payments/verify-sms', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Authorization': 'Bearer ' + testData.access_token
+                },
+                body: JSON.stringify({
+                    verification_token: verificationToken,
+                    sms_code: smsCode
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                resultToken = result.result_token;
+                document.getElementById('step3-result').innerHTML = `
+                        <div class="success">
+                            <p>✅ SMS код подтвержден!</p>
+                            <p>Статус платежа: ${result.status}</p>
+                            <p>Payment ID: ${result.payment_id}</p>
+                        </div>
+                    `;
+                document.getElementById('step4').classList.remove('hidden');
+                await loadPaymentResult();
+            } else {
+                document.getElementById('step3-result').innerHTML = `
+                        <div class="error">
+                            <p>❌ Ошибка подтверждения</p>
+                            <p>${result.message}</p>
+                            ${result.remaining_attempts ? `<p>Осталось попыток: ${result.remaining_attempts}</p>` : ''}
+                        </div>
+                    `;
+            }
+        } catch (error) {
+            document.getElementById('step3-result').innerHTML = `
+                    <div class="error">
+                        <p>❌ Сетевая ошибка</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+        }
+    }
+
+    // Загрузка результата
+    async function loadPaymentResult() {
+        try {
+            const response = await fetch(`/api/payments/result/${resultToken}`, {
+                headers: {
+                    'Authorization': 'Bearer ' + testData.access_token
+                }
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                const statusClass = result.status === 'approved' ? 'success' : 'error';
+                const statusIcon = result.status === 'approved' ? '✅' : '❌';
+                const statusText = result.status === 'approved' ? 'УСПЕШНО' : 'ОТКЛОНЕНО';
+
+                document.getElementById('step4-result').innerHTML = `
+                        <div class="${statusClass}">
+                            <h3>${statusIcon} ОПЛАТА ${statusText}</h3>
+                            <p><strong>ID платежа:</strong> ${result.payment_id}</p>
+                            <p><strong>Бронирование:</strong> #${testData.reservation_id}</p>
+                            <p><strong>Сумма:</strong> ${(result.amount_rubles / 100).toFixed(2)} ${result.currency}</p>
+                            <p><strong>Карта:</strong> ${result.card_brand} ****${result.card_last4}</p>
+                            <p><strong>Референс:</strong> ${result.provider_reference}</p>
+                            <p><strong>Время:</strong> ${new Date(result.created_at).toLocaleString('ru-RU')}</p>
+                        </div>
+                    `;
+            } else {
+                document.getElementById('step4-result').innerHTML = `
+                        <div class="error">
+                            <p>❌ Ошибка загрузки результата</p>
+                            <p>${result.message}</p>
+                        </div>
+                    `;
+            }
+        } catch (error) {
+            document.getElementById('step4-result').innerHTML = `
+                    <div class="error">
+                        <p>❌ Сетевая ошибка</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+        }
+    }
+
+    // Автопереход между полями ввода
+    document.getElementById('smsCode').addEventListener('input', function(e) {
+        if (this.value.length === 3) {
+            verifySms();
+        }
+    });
+</script>
+</body>
+</html>
