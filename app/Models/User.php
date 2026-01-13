@@ -63,7 +63,6 @@ class User extends Authenticatable
         ];
     }
 
-    // Role checks
     public function isAdmin(): bool
     {
         return $this->role === self::ROLE_ADMIN;
@@ -84,7 +83,6 @@ class User extends Authenticatable
         return $this->is_blocked;
     }
 
-    // Scopes
     public function scopeAdmins($query)
     {
         return $query->where('role', self::ROLE_ADMIN);

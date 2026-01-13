@@ -14,6 +14,7 @@ class AdminController extends Controller
         $this->middleware('auth:sanctum');
     }
 
+
     // GET /api/admin/users - список всех пользователей
     public function getUsers(Request $request)
     {
@@ -52,6 +53,47 @@ class AdminController extends Controller
         return response()->json([
             'message' => 'User unblocked successfully',
             'user' => $user
+        ]);
+    }
+
+    // PUT /api/admin/users/{id} - обновление пользователя
+    public function updateUser($id, Request $request)
+    {
+        $user = User::findOrFail($id);
+        $currentAdmin = $request->user();
+
+        // Админ не может редактировать другого админа
+        if ($user->isAdmin() && $user->id !== $currentAdmin->id) {
+            return response()->json([
+                'message' => 'Cannot edit another admin user'
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+            'password' => 'sometimes|string|min:6',
+            'role' => 'sometimes|in:' . User::ROLE_USER . ',' . User::ROLE_MANAGER . ',' . User::ROLE_ADMIN,
+            'is_blocked' => 'sometimes|boolean',
+        ]);
+
+        // Админ не может изменить роль другого админа
+        if (isset($validated['role']) && $user->isAdmin() && $user->id !== $currentAdmin->id) {
+            return response()->json([
+                'message' => 'Cannot change role of another admin user'
+            ], 422);
+        }
+
+        // Хешируем пароль, если он передан
+        if (isset($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);
+        }
+
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'User updated successfully',
+            'user' => $user->fresh()
         ]);
     }
 

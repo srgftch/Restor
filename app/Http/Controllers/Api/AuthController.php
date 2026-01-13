@@ -54,4 +54,35 @@ class AuthController extends Controller
     {
         return $request->user();
     }
+
+    // PUT /api/user - обновление профиля пользователя
+    public function update(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+            'password' => 'sometimes|string|min:6',
+            'current_password' => 'required_with:password|string',
+        ]);
+
+        // Проверка текущего пароля при изменении пароля
+        if (isset($validated['password'])) {
+            if (!Hash::check($validated['current_password'], $user->password)) {
+                return response()->json([
+                    'message' => 'Current password is incorrect'
+                ], 422);
+            }
+            $validated['password'] = Hash::make($validated['password']);
+            unset($validated['current_password']);
+        }
+
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => $user->fresh()
+        ]);
+    }
 }
